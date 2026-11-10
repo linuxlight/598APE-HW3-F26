@@ -81,32 +81,40 @@ static void stabilize() {
   int changed = 0;
   do {
     changed = 0;
-    for (int i = 0; i < n; ++i) {
-      // Row i of the disk is the interval |j - half| <= r with
-      // r = floor(sqrt(r2 - di2)); clip it by the mouth bound.
-      const int rem = r2 - (i - half) * (i - half);
-      if (rem < 0)
-        continue;
-      int r = (int)sqrt(rem);
-      while (r * r > rem) // fix any floating-point rounding
-        r--;
-      while ((r + 1) * (r + 1) <= rem)
-        r++;
-      const int lo = half - r;
-      const int hi = MIN(half + r, MAX(i, n - 1 - i));
-      for (int j = lo; j <= hi; ++j) {
-        if (grid[i][j] < 4)
+    // Toppling row i writes rows i-1..i+1, so rows three apart never touch
+    // the same cells. Each phase handles one residue class mod 3 in parallel;
+    // the implicit barrier after each phase keeps them apart. The order
+    // differs from a serial sweep, but by the abelian property the result
+    // is the same.
+    for (int phase = 0; phase < 3; ++phase) {
+#pragma omp parallel for schedule(static, 1) reduction(| : changed)
+      for (int i = phase; i < n; i += 3) {
+        // Row i of the disk is the interval |j - half| <= r with
+        // r = floor(sqrt(r2 - di2)); clip it by the mouth bound.
+        const int rem = r2 - (i - half) * (i - half);
+        if (rem < 0)
           continue;
-        changed = 1; // topple it
-        grid[i][j] -= 4;
-        if (i > 0)
-          grid[i - 1][j]++;
-        if (j > 0)
-          grid[i][j - 1]++;
-        if (i < n - 1)
-          grid[i + 1][j]++;
-        if (j < n - 1)
-          grid[i][j + 1]++;
+        int r = (int)sqrt(rem);
+        while (r * r > rem) // fix any floating-point rounding
+          r--;
+        while ((r + 1) * (r + 1) <= rem)
+          r++;
+        const int lo = half - r;
+        const int hi = MIN(half + r, MAX(i, n - 1 - i));
+        for (int j = lo; j <= hi; ++j) {
+          if (grid[i][j] < 4)
+            continue;
+          changed = 1; // topple it
+          grid[i][j] -= 4;
+          if (i > 0)
+            grid[i - 1][j]++;
+          if (j > 0)
+            grid[i][j - 1]++;
+          if (i < n - 1)
+            grid[i + 1][j]++;
+          if (j < n - 1)
+            grid[i][j + 1]++;
+        }
       }
     }
   } while (changed);
