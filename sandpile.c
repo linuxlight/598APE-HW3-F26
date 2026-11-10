@@ -73,13 +73,19 @@ static void render(char *filename) {
 }
 
 static void stabilize() {
+  // Locals can't be aliased by the int stores into grid, so the compiler can
+  // keep them in registers instead of reloading the global N every iteration.
+  const int n = N;
+  const int half = n / 2;
+  const int r2 = half * half;
   int changed = 0;
   do {
     changed = 0;
-    for (int i = 0; i < N; ++i) {
-      for (int j = 0; j <= MAX(i, N - 1 - i); ++j) {
-        if ((i - N / 2) * (i - N / 2) + (j - N / 2) * (j - N / 2) <=
-            (N / 2) * (N / 2)) {
+    for (int i = 0; i < n; ++i) {
+      const int di2 = (i - half) * (i - half);
+      const int jmax = MAX(i, n - 1 - i);
+      for (int j = 0; j <= jmax; ++j) {
+        if (di2 + (j - half) * (j - half) <= r2) {
           if (grid[i][j] < 4)
             continue;
           changed = 1; // topple it
@@ -88,9 +94,9 @@ static void stabilize() {
             grid[i - 1][j]++;
           if (j > 0)
             grid[i][j - 1]++;
-          if (i < N - 1)
+          if (i < n - 1)
             grid[i + 1][j]++;
-          if (j < N - 1)
+          if (j < n - 1)
             grid[i][j + 1]++;
         }
       }
