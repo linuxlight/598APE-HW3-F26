@@ -82,23 +82,31 @@ static void stabilize() {
   do {
     changed = 0;
     for (int i = 0; i < n; ++i) {
-      const int di2 = (i - half) * (i - half);
-      const int jmax = MAX(i, n - 1 - i);
-      for (int j = 0; j <= jmax; ++j) {
-        if (di2 + (j - half) * (j - half) <= r2) {
-          if (grid[i][j] < 4)
-            continue;
-          changed = 1; // topple it
-          grid[i][j] -= 4;
-          if (i > 0)
-            grid[i - 1][j]++;
-          if (j > 0)
-            grid[i][j - 1]++;
-          if (i < n - 1)
-            grid[i + 1][j]++;
-          if (j < n - 1)
-            grid[i][j + 1]++;
-        }
+      // Row i of the disk is the interval |j - half| <= r with
+      // r = floor(sqrt(r2 - di2)); clip it by the mouth bound.
+      const int rem = r2 - (i - half) * (i - half);
+      if (rem < 0)
+        continue;
+      int r = (int)sqrt(rem);
+      while (r * r > rem) // fix any floating-point rounding
+        r--;
+      while ((r + 1) * (r + 1) <= rem)
+        r++;
+      const int lo = half - r;
+      const int hi = MIN(half + r, MAX(i, n - 1 - i));
+      for (int j = lo; j <= hi; ++j) {
+        if (grid[i][j] < 4)
+          continue;
+        changed = 1; // topple it
+        grid[i][j] -= 4;
+        if (i > 0)
+          grid[i - 1][j]++;
+        if (j > 0)
+          grid[i][j - 1]++;
+        if (i < n - 1)
+          grid[i + 1][j]++;
+        if (j < n - 1)
+          grid[i][j + 1]++;
       }
     }
   } while (changed);
