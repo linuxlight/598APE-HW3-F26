@@ -29,6 +29,7 @@ STEPS=(
   "e898c81|hoist loop invariants"
   "87a9fc4|per-row disk bounds"
   "814ce2e|OpenMP 3-phase rows"
+  "ba00791|mirror symmetry"
 )
 SCHEDULES=("static" "static,1" "static,8" "dynamic,4" "guided")
 
