@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 # Benchmark each optimization step and the thread scaling of the final one.
 #
-#   ./bench.sh [steps|threads|schedules|all]      (default: all)
+#   ./bench.sh [steps|threads|schedules|perfstat|all]   (default: all)
 #
 #   steps      build every commit in STEPS with its own Makefile and time it
 #   threads    time HEAD with each thread count in THREADS
 #   schedules  time HEAD with each OMP_SCHEDULE in SCHEDULES
 #              (only if sandpile.c uses schedule(runtime))
+#   perfstat   one `perf stat` run of every commit in STEPS; appends cycles,
+#              instructions, branches, branch and cache misses to
+#              results/perfstat.csv (not part of `all`)
 #
 # Environment overrides:
 #   N=1001               grid size
@@ -86,7 +89,38 @@ run() {
 }
 
 echo "# $(lscpu | sed -n 's/^Model name: *//p'), $CORES physical cores, $(nproc) logical CPUs"
-echo "mode,label,commit,threads,schedule,N,rep,seconds,output"
+[ "$MODE" = perfstat ] || echo "mode,label,commit,threads,schedule,N,rep,seconds,output"
+
+# perfstat <label> <rev>: one `perf stat` run of <rev>, counters appended to
+# results/perfstat.csv. Serial builds are recorded as 1 thread.
+perfstat() {
+  local exe secs threads=1 counters out=$work/perf.csv
+  exe=$(build "$2")
+  git show "$2:Makefile" | grep -q -- -fopenmp && threads=$STEP_THREADS
+  rm -f "$work/run/identity.png"
+  secs=$( { time (cd "$work/run" && OMP_NUM_THREADS=$threads perf stat -x, -o "$out" \
+                  -e cycles,instructions,branches,branch-misses,cache-misses \
+                  "$exe" "$N" >/dev/null 2>&1); } 2>&1 )
+  if ! cmp -s "$work/run/identity.png" "$ref"; then
+    echo "# output mismatch for $1, not recorded" >&2
+    return
+  fi
+  # perf -x, lines are "value,unit,event[:modifiers],..."
+  counters=$(awk -F, '{ split($3, e, ":"); if (e[1] == "cpu-cycles") e[1] = "cycles"; v[e[1]] = $1 }
+    END { printf "%s,%s,%s,%s,%s", v["cycles"], v["instructions"], v["branches"],
+          v["branch-misses"], v["cache-misses"] }' "$out")
+  [ -f results/perfstat.csv ] ||
+    echo "label,commit,threads,seconds,cycles,instructions,branches,branch_misses,cache_misses" \
+      >results/perfstat.csv
+  echo "$1,$2,$threads,$secs,$counters" | tee -a results/perfstat.csv
+}
+
+if [ "$MODE" = perfstat ]; then
+  echo "label,commit,threads,seconds,cycles,instructions,branches,branch_misses,cache_misses"
+  for step in "${STEPS[@]}"; do
+    perfstat "${step#*|}" "${step%%|*}"
+  done
+fi
 
 if [ "$MODE" = steps ] || [ "$MODE" = all ]; then
   for step in "${STEPS[@]}"; do
