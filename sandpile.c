@@ -78,6 +78,10 @@ static void stabilize() {
   const int n = N;
   const int half = n / 2;
   const int r2 = half * half;
+  // For odd n the pacman is symmetric about row `half`, so only rows
+  // 0..half are simulated and the lower half is mirrored at the end.
+  const int sym = n % 2;
+  const int rows = sym ? half + 1 : n;
   int changed = 0;
   do {
     changed = 0;
@@ -88,7 +92,10 @@ static void stabilize() {
     // is the same.
     for (int phase = 0; phase < 3; ++phase) {
 #pragma omp parallel for schedule(static, 1) reduction(| : changed)
-      for (int i = phase; i < n; i += 3) {
+      for (int i = phase; i < rows; i += 3) {
+        // Row half-1 topples together with its mirror row half+1, and both
+        // send a grain into the middle row.
+        const int down = (sym && i + 1 == half) ? 2 : 1;
         // Row i of the disk is the interval |j - half| <= r with
         // r = floor(sqrt(r2 - di2)); clip it by the mouth bound.
         const int rem = r2 - (i - half) * (i - half);
@@ -111,13 +118,16 @@ static void stabilize() {
           if (j > 0)
             grid[i][j - 1]++;
           if (i < n - 1)
-            grid[i + 1][j]++;
+            grid[i + 1][j] += down;
           if (j < n - 1)
             grid[i][j + 1]++;
         }
       }
     }
   } while (changed);
+  if (sym) // restore the lower half from the upper half
+    for (int i = half + 1; i < n; ++i)
+      memcpy(grid[i], grid[n - 1 - i], n * sizeof(int));
 }
 
 void find_identity() {
